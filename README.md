@@ -7,7 +7,7 @@ A full-stack web application for instant statistical analysis and data visualisa
 ## 🔗 Live Demo
 
 - **Frontend:** https://statviz-two.vercel.app
-- **Backend API:** https://statviz-api.onrender.com
+- **Backend API:** https://statviz-api.onrender.com/docs
 
 ---
 
