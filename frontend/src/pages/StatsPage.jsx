@@ -434,14 +434,171 @@ const btnStyle = {
   fontWeight: 500, cursor: "pointer", marginTop: 4,
 };
 
+// ── Time Series Panel ─────────────────────────────────────────────────────────
+function TimeSeriesPanel({ columns, onRun }) {
+  const numCols = columns.filter(c => c.type === "numeric");
+  const [col, setCol] = useState(numCols[0]?.name || "");
+  const [window, setWindow] = useState("3");
+
+  const run = () => {
+    const colData = columns.find(c => c.name === col);
+    onRun("/stats/timeseries", {
+      col: generateFromStats(colData),
+      window: parseInt(window),
+    });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Column</label>
+        <select value={col} onChange={e => setCol(e.target.value)} style={selectStyle}>
+          {numCols.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Moving average window</label>
+        <select value={window} onChange={e => setWindow(e.target.value)} style={selectStyle}>
+          <option value="3">3 periods</option>
+          <option value="5">5 periods</option>
+          <option value="7">7 periods</option>
+          <option value="10">10 periods</option>
+        </select>
+      </div>
+      <button onClick={run} style={btnStyle}>Run Time Series →</button>
+    </div>
+  );
+}
+
+// ── Probability Panel ─────────────────────────────────────────────────────────
+function ProbabilityPanel({ columns, onRun }) {
+  const numCols = columns.filter(c => c.type === "numeric");
+  const [col, setCol] = useState(numCols[0]?.name || "");
+  const [distType, setDistType] = useState("normal");
+
+  const run = () => {
+    const colData = columns.find(c => c.name === col);
+    onRun("/stats/probability", {
+      col: generateFromStats(colData),
+      dist_type: distType,
+    });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Distribution</label>
+        <select value={distType} onChange={e => setDistType(e.target.value)} style={selectStyle}>
+          <option value="normal">Normal Distribution</option>
+          <option value="binomial">Binomial Distribution</option>
+          <option value="poisson">Poisson Distribution</option>
+        </select>
+      </div>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Column</label>
+        <select value={col} onChange={e => setCol(e.target.value)} style={selectStyle}>
+          {numCols.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+        </select>
+      </div>
+      <button onClick={run} style={btnStyle}>Fit Distribution →</button>
+    </div>
+  );
+}
+
+// ── Multivariate Panel ────────────────────────────────────────────────────────
+function MultivariatePanel({ columns, onRun }) {
+  const numCols = columns.filter(c => c.type === "numeric");
+  const [method, setMethod] = useState("pca");
+  const [selectedCols, setSelectedCols] = useState(numCols.slice(0, 3).map(c => c.name));
+  const [nComponents, setNComponents] = useState("2");
+  const [nClusters, setNClusters] = useState("3");
+
+  const toggleCol = (name) => {
+    setSelectedCols(prev =>
+      prev.includes(name) ? prev.filter(c => c !== name) : [...prev, name]
+    );
+  };
+
+  const run = () => {
+    const colsData = selectedCols.map(name => generateFromStats(columns.find(c => c.name === name)));
+    const n = colsData[0]?.length || 50;
+    const X = Array.from({ length: n }, (_, i) => selectedCols.map((_, j) => colsData[j][i]));
+    onRun("/stats/multivariate", {
+      method,
+      X,
+      feature_names: selectedCols,
+      n_components: parseInt(nComponents),
+      n_clusters: parseInt(nClusters),
+    });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Method</label>
+        <select value={method} onChange={e => setMethod(e.target.value)} style={selectStyle}>
+          <option value="pca">PCA — Dimensionality Reduction</option>
+          <option value="kmeans">K-Means Clustering</option>
+        </select>
+      </div>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Select columns (min 2)</label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {numCols.map(c => (
+            <div
+              key={c.name}
+              onClick={() => toggleCol(c.name)}
+              style={{
+                padding: "5px 12px", borderRadius: 8, fontSize: 12,
+                cursor: "pointer", fontWeight: 500,
+                background: selectedCols.includes(c.name) ? "#185fa5" : "#f1efe8",
+                color: selectedCols.includes(c.name) ? "#fff" : "#5f5e5a",
+                border: `0.5px solid ${selectedCols.includes(c.name) ? "#185fa5" : "#d3d1c7"}`,
+              }}
+            >
+              {c.name}
+            </div>
+          ))}
+        </div>
+      </div>
+      {method === "pca" && (
+        <div>
+          <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Number of components</label>
+          <select value={nComponents} onChange={e => setNComponents(e.target.value)} style={selectStyle}>
+            <option value="2">2 components</option>
+            <option value="3">3 components</option>
+          </select>
+        </div>
+      )}
+      {method === "kmeans" && (
+        <div>
+          <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Number of clusters</label>
+          <select value={nClusters} onChange={e => setNClusters(e.target.value)} style={selectStyle}>
+            <option value="2">2 clusters</option>
+            <option value="3">3 clusters</option>
+            <option value="4">4 clusters</option>
+            <option value="5">5 clusters</option>
+          </select>
+        </div>
+      )}
+      <button onClick={run} style={btnStyle}>Run {method === "pca" ? "PCA" : "K-Means"} →</button>
+    </div>
+  );
+}
+
 // ── Categories ────────────────────────────────────────────────────────────────
 const CATEGORIES = [
+
   { id: "ttest", label: "T-Tests", icon: "🔬", desc: "Compare means — one sample, two sample, paired" },
   { id: "anova", label: "ANOVA", icon: "📊", desc: "Compare means across multiple groups" },
   { id: "chisquare", label: "Chi-Square", icon: "χ²", desc: "Test association between categorical variables" },
   { id: "correlation", label: "Correlation", icon: "🔗", desc: "Measure relationship strength — Pearson, Spearman, Kendall" },
   { id: "regression", label: "Regression", icon: "📈", desc: "Predict values — simple and multiple linear regression" },
   { id: "nonparametric", label: "Non-Parametric", icon: "🔄", desc: "Distribution-free tests — Mann-Whitney, Wilcoxon, Kruskal-Wallis" },
+  { id: "timeseries", label: "Time Series", icon: "⏱️", desc: "Trend, moving average, stationarity analysis" },
+  { id: "probability", label: "Probability", icon: "🎲", desc: "Fit distributions — Normal, Binomial, Poisson" },
+  { id: "multivariate", label: "Multivariate", icon: "🧠", desc: "PCA dimensionality reduction and K-Means clustering" },
+
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -549,6 +706,9 @@ export default function StatsPage() {
                 {activeCategory === "correlation" && <CorrelationPanel columns={result.columns} onRun={runTest} />}
                 {activeCategory === "regression" && <RegressionPanel columns={result.columns} onRun={runTest} />}
                 {activeCategory === "nonparametric" && <NonParametricPanel columns={result.columns} onRun={runTest} />}
+                {activeCategory === "timeseries" && <TimeSeriesPanel columns={result.columns} onRun={runTest} />}
+                {activeCategory === "probability" && <ProbabilityPanel columns={result.columns} onRun={runTest} />}
+                {activeCategory === "multivariate" && <MultivariatePanel columns={result.columns} onRun={runTest} />}
 
                 {loading && (
                   <div style={{ textAlign: "center", padding: "20px 0" }}>

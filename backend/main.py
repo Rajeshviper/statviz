@@ -557,3 +557,167 @@ async def run_nonparametric(data: dict):
             }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Time Series ───────────────────────────────────────────────────────────────
+@app.post("/stats/timeseries")
+async def run_timeseries(data: dict):
+    col = data.get("col", [])
+    window = data.get("window", 3)
+
+    try:
+        series = pd.Series(col)
+
+        # Moving average
+        ma = series.rolling(window=window).mean().dropna().tolist()
+
+        # Trend (linear)
+        x = np.arange(len(series))
+        slope, intercept, r, p, se = scipy_stats.linregress(x, series)
+
+        # Decomposition (manual)
+        trend_line = [intercept + slope * i for i in range(len(series))]
+        residuals = (series - pd.Series(trend_line)).tolist()
+
+        # Basic stationarity (ADF-like check using variance)
+        first_half = series[:len(series)//2]
+        second_half = series[len(series)//2:]
+        is_stationary = bool(abs(first_half.mean() - second_half.mean()) < series.std())
+
+        return {
+            "test": "Time Series Analysis",
+            "original": series.tolist(),
+            "moving_average": ma,
+            "trend_line": trend_line,
+            "residuals": residuals,
+            "slope": round(float(slope), 4),
+            "intercept": round(float(intercept), 4),
+            "r_squared": round(float(r**2), 4),
+            "trend_direction": "upward" if slope > 0 else "downward" if slope < 0 else "flat",
+            "is_stationary": is_stationary,
+            "interpretation": f"The series has a {('upward' if slope > 0 else 'downward' if slope < 0 else 'flat')} trend (slope={slope:.4f}). R²={r**2:.3f}. The series appears {'stationary' if is_stationary else 'non-stationary'}."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Probability Distributions ─────────────────────────────────────────────────
+@app.post("/stats/probability")
+async def run_probability(data: dict):
+    dist_type = data.get("dist_type", "normal")
+    col = data.get("col", [])
+
+    try:
+        series = np.array(col)
+
+        if dist_type == "normal":
+            mu, sigma = scipy_stats.norm.fit(series)
+            x = np.linspace(mu - 4*sigma, mu + 4*sigma, 100)
+            pdf = scipy_stats.norm.pdf(x, mu, sigma).tolist()
+            stat, p = scipy_stats.shapiro(series[:min(len(series), 5000)])
+            return {
+                "test": "Normal Distribution",
+                "mu": round(float(mu), 4),
+                "sigma": round(float(sigma), 4),
+                "x": [round(float(v), 4) for v in x],
+                "pdf": [round(float(v), 6) for v in pdf],
+                "shapiro_stat": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "significant": bool(p > 0.05),
+                "goodness_of_fit": round(float(p), 4),
+                "interpretation": f"Fitted Normal distribution: μ={mu:.3f}, σ={sigma:.3f}. {'Data fits normal distribution well' if p > 0.05 else 'Data does not fit normal distribution'} (Shapiro-Wilk p={p:.4f})."
+            }
+
+        elif dist_type == "binomial":
+            p_est = np.mean(series > np.mean(series))
+            n_est = len(series)
+            x = np.arange(0, n_est + 1)
+            pmf = scipy_stats.binom.pmf(x[:20], n_est, p_est).tolist()
+            mean_b = n_est * p_est
+            var_b = n_est * p_est * (1 - p_est)
+            return {
+                "test": "Binomial Distribution",
+                "n": n_est,
+                "p": round(float(p_est), 4),
+                "mean": round(float(mean_b), 4),
+                "variance": round(float(var_b), 4),
+                "std": round(float(np.sqrt(var_b)), 4),
+                "pmf_values": [round(float(v), 6) for v in pmf],
+                "significant": True,
+                "interpretation": f"Fitted Binomial: n={n_est}, p={p_est:.3f}. Expected mean={mean_b:.3f}, variance={var_b:.3f}."
+            }
+
+        elif dist_type == "poisson":
+            lambda_est = np.mean(series)
+            x = np.arange(0, max(20, int(lambda_est * 3)))
+            pmf = scipy_stats.poisson.pmf(x, lambda_est).tolist()
+            return {
+                "test": "Poisson Distribution",
+                "lambda": round(float(lambda_est), 4),
+                "mean": round(float(lambda_est), 4),
+                "variance": round(float(lambda_est), 4),
+                "pmf_values": [round(float(v), 6) for v in pmf[:20]],
+                "significant": True,
+                "interpretation": f"Fitted Poisson distribution: λ={lambda_est:.3f}. Mean=Variance={lambda_est:.3f} (key property of Poisson)."
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Multivariate ──────────────────────────────────────────────────────────────
+@app.post("/stats/multivariate")
+async def run_multivariate(data: dict):
+    from sklearn.decomposition import PCA
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+
+    method = data.get("method", "pca")
+    X_data = data.get("X", [])
+    feature_names = data.get("feature_names", [])
+    n_components = data.get("n_components", 2)
+    n_clusters = data.get("n_clusters", 3)
+
+    try:
+        X = np.array(X_data)
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        if method == "pca":
+            pca = PCA(n_components=min(n_components, X.shape[1]))
+            X_pca = pca.fit_transform(X_scaled)
+
+            loadings = {}
+            for i, name in enumerate(feature_names):
+                loadings[name] = [round(float(v), 4) for v in pca.components_[:, i]]
+
+            return {
+                "test": "Principal Component Analysis (PCA)",
+                "n_components": int(pca.n_components_),
+                "explained_variance": [round(float(v), 4) for v in pca.explained_variance_ratio_],
+                "cumulative_variance": [round(float(v), 4) for v in np.cumsum(pca.explained_variance_ratio_)],
+                "loadings": loadings,
+                "scores": X_pca[:10].tolist(),
+                "significant": bool(pca.explained_variance_ratio_[0] > 0.3),
+                "interpretation": f"First {pca.n_components_} components explain {np.sum(pca.explained_variance_ratio_)*100:.1f}% of total variance. PC1 explains {pca.explained_variance_ratio_[0]*100:.1f}%."
+            }
+
+        elif method == "kmeans":
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(X_scaled)
+
+            cluster_sizes = {f"Cluster {i+1}": int(np.sum(labels == i)) for i in range(n_clusters)}
+            inertia = float(kmeans.inertia_)
+
+            return {
+                "test": "K-Means Clustering",
+                "n_clusters": n_clusters,
+                "inertia": round(inertia, 4),
+                "cluster_sizes": cluster_sizes,
+                "labels": labels[:50].tolist(),
+                "significant": True,
+                "interpretation": f"Data grouped into {n_clusters} clusters. Inertia={inertia:.2f} (lower = tighter clusters). Cluster sizes: {', '.join([f'{k}={v}' for k,v in cluster_sizes.items()])}."
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
