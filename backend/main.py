@@ -721,3 +721,194 @@ async def run_multivariate(data: dict):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+# ── Bayesian Analysis ─────────────────────────────────────────────────────────
+@app.post("/stats/bayesian")
+async def run_bayesian(data: dict):
+    method = data.get("method", "bayes_theorem")
+    
+    try:
+        if method == "bayes_theorem":
+            # P(A|B) = P(B|A) * P(A) / P(B)
+            prior = data.get("prior", 0.5)
+            likelihood = data.get("likelihood", 0.8)
+            evidence = data.get("evidence", 0.6)
+            
+            posterior = (likelihood * prior) / evidence if evidence > 0 else 0
+            posterior = min(1.0, max(0.0, posterior))
+            
+            # Generate prior and posterior distributions
+            from scipy.stats import beta
+            alpha_prior = max(0.1, prior * 10)
+            beta_prior = max(0.1, (1 - prior) * 10)
+            alpha_post = alpha_prior + likelihood * 10
+            beta_post = beta_prior + (1 - likelihood) * 10
+            
+            x = np.linspace(0, 1, 100).tolist()
+            prior_dist = scipy_stats.beta.pdf(x, alpha_prior, beta_prior).tolist()
+            posterior_dist = scipy_stats.beta.pdf(x, alpha_post, beta_post).tolist()
+            
+            return {
+                "test": "Bayes Theorem",
+                "prior": round(float(prior), 4),
+                "likelihood": round(float(likelihood), 4),
+                "evidence": round(float(evidence), 4),
+                "posterior": round(float(posterior), 4),
+                "bayes_factor": round(float(posterior / prior) if prior > 0 else 0, 4),
+                "x": [round(float(v), 4) for v in x],
+                "prior_dist": [round(float(v), 4) for v in prior_dist],
+                "posterior_dist": [round(float(v), 4) for v in posterior_dist],
+                "significant": bool(posterior > prior),
+                "interpretation": f"Prior probability: {prior:.3f}. After observing evidence, posterior probability: {posterior:.3f}. {'Evidence increased' if posterior > prior else 'Evidence decreased'} our belief by {abs(posterior - prior):.3f}. Bayes Factor={posterior/prior:.3f} ({'strong' if posterior/prior > 3 else 'moderate' if posterior/prior > 1.5 else 'weak'} evidence)."
+            }
+            
+        elif method == "credible_interval":
+            col = data.get("col", [])
+            confidence = data.get("confidence", 0.95)
+            
+            series = np.array(col)
+            n = len(series)
+            mean = np.mean(series)
+            std = np.std(series)
+            
+            # Bayesian credible interval using normal-normal conjugate
+            alpha_level = (1 - confidence) / 2
+            z = scipy_stats.norm.ppf(1 - alpha_level)
+            margin = z * (std / np.sqrt(n))
+            
+            lower = mean - margin
+            upper = mean + margin
+            
+            # Posterior distribution
+            x = np.linspace(mean - 4*std/np.sqrt(n), mean + 4*std/np.sqrt(n), 100)
+            posterior = scipy_stats.norm.pdf(x, mean, std/np.sqrt(n))
+            
+            return {
+                "test": "Bayesian Credible Interval",
+                "mean": round(float(mean), 4),
+                "std": round(float(std), 4),
+                "lower_bound": round(float(lower), 4),
+                "upper_bound": round(float(upper), 4),
+                "confidence_level": confidence,
+                "x": [round(float(v), 4) for v in x],
+                "posterior": [round(float(v), 6) for v in posterior],
+                "significant": True,
+                "interpretation": f"There is a {confidence*100:.0f}% probability that the true mean lies between {lower:.3f} and {upper:.3f}. Unlike frequentist CI, this directly states the probability of the parameter being in this range."
+            }
+
+        elif method == "beta_binomial":
+            successes = data.get("successes", 10)
+            trials = data.get("trials", 20)
+            prior_alpha = data.get("prior_alpha", 1)
+            prior_beta = data.get("prior_beta", 1)
+
+            # Conjugate update
+            post_alpha = prior_alpha + successes
+            post_beta = prior_beta + (trials - successes)
+
+            x = np.linspace(0, 1, 100)
+            prior_dist = scipy_stats.beta.pdf(x, prior_alpha, prior_beta)
+            posterior_dist = scipy_stats.beta.pdf(x, post_alpha, post_beta)
+
+            post_mean = post_alpha / (post_alpha + post_beta)
+            post_var = (post_alpha * post_beta) / ((post_alpha + post_beta)**2 * (post_alpha + post_beta + 1))
+            credible_low = scipy_stats.beta.ppf(0.025, post_alpha, post_beta)
+            credible_high = scipy_stats.beta.ppf(0.975, post_alpha, post_beta)
+
+            return {
+                "test": "Beta-Binomial Bayesian Update",
+                "prior_alpha": prior_alpha,
+                "prior_beta": prior_beta,
+                "posterior_alpha": post_alpha,
+                "posterior_beta": post_beta,
+                "posterior_mean": round(float(post_mean), 4),
+                "posterior_variance": round(float(post_var), 6),
+                "credible_interval_low": round(float(credible_low), 4),
+                "credible_interval_high": round(float(credible_high), 4),
+                "x": [round(float(v), 4) for v in x],
+                "prior_dist": [round(float(v), 4) for v in prior_dist],
+                "posterior_dist": [round(float(v), 4) for v in posterior_dist],
+                "significant": True,
+                "interpretation": f"With {successes} successes in {trials} trials, posterior mean={post_mean:.3f}. 95% credible interval: [{credible_low:.3f}, {credible_high:.3f}]. The data updated our prior belief from {prior_alpha/(prior_alpha+prior_beta):.3f} to {post_mean:.3f}."
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Survival Analysis ─────────────────────────────────────────────────────────
+@app.post("/stats/survival")
+async def run_survival(data: dict):
+    method = data.get("method", "kaplanmeier")
+
+    try:
+        if method == "kaplanmeier":
+            durations = data.get("durations", [])
+            events = data.get("events", [])
+
+            from lifelines import KaplanMeierFitter
+            kmf = KaplanMeierFitter()
+            kmf.fit(durations, event_observed=events)
+
+            timeline = kmf.timeline.tolist()
+            survival = kmf.survival_function_["KM_estimate"].tolist()
+            ci_lower = kmf.confidence_interval_["KM_estimate_lower_0.95"].tolist()
+            ci_upper = kmf.confidence_interval_["KM_estimate_upper_0.95"].tolist()
+            median_survival = float(kmf.median_survival_time_)
+            median_str = f"{median_survival:.2f}" if not np.isnan(median_survival) else "not reached"
+
+            return {
+                "test": "Kaplan-Meier Survival Analysis",
+                "median_survival": round(median_survival, 4) if not np.isnan(median_survival) else None,
+                "timeline": [round(float(v), 4) for v in timeline],
+                "survival_probability": [round(float(v), 4) for v in survival],
+                "ci_lower": [round(float(v), 4) for v in ci_lower],
+                "ci_upper": [round(float(v), 4) for v in ci_upper],
+                "n_subjects": len(durations),
+                "n_events": int(sum(events)),
+                "significant": True,
+                "interpretation": f"Kaplan-Meier analysis of {len(durations)} subjects with {int(sum(events))} events. Median survival time: {median_str}. Survival probability decreases over time as events occur."
+            }
+
+        elif method == "logrank":
+            durations_a = data.get("durations_a", [])
+            events_a = data.get("events_a", [])
+            durations_b = data.get("durations_b", [])
+            events_b = data.get("events_b", [])
+
+            from lifelines.statistics import logrank_test
+            result = logrank_test(durations_a, durations_b,
+                                  event_observed_A=events_a,
+                                  event_observed_B=events_b)
+
+            return {
+                "test": "Log-Rank Test",
+                "test_statistic": round(float(result.test_statistic), 4),
+                "p_value": round(float(result.p_value), 4),
+                "significant": bool(result.p_value < 0.05),
+                "interpretation": f"The two survival curves are {'significantly different' if result.p_value < 0.05 else 'not significantly different'} (χ²={result.test_statistic:.3f}, p={result.p_value:.4f}). {'There is a significant difference in survival between the two groups.' if result.p_value < 0.05 else 'No significant difference in survival was found between the two groups.'}"
+            }
+
+        elif method == "hazard":
+            durations = data.get("durations", [])
+            events = data.get("events", [])
+
+            from lifelines import NelsonAalenFitter
+            naf = NelsonAalenFitter()
+            naf.fit(durations, event_observed=events)
+
+            timeline = naf.timeline.tolist()
+            hazard = naf.cumulative_hazard_["NA_estimate"].tolist()
+
+            return {
+                "test": "Nelson-Aalen Cumulative Hazard",
+                "timeline": [round(float(v), 4) for v in timeline],
+                "cumulative_hazard": [round(float(v), 4) for v in hazard],
+                "n_subjects": len(durations),
+                "n_events": int(sum(events)),
+                "significant": True,
+                "interpretation": f"Nelson-Aalen cumulative hazard estimate for {len(durations)} subjects. The cumulative hazard increases over time indicating increasing risk of the event occurring."
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

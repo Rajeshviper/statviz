@@ -700,9 +700,175 @@ function MultivariatePanel({ columns, onRun }) {
   );
 }
 
+// ── Bayesian Panel ────────────────────────────────────────────────────────────
+function BayesianPanel({ columns, onRun }) {
+  const numCols = columns.filter(c => c.type === "numeric");
+  const [method, setMethod] = useState("bayes_theorem");
+  const [prior, setPrior] = useState("0.3");
+  const [likelihood, setLikelihood] = useState("0.8");
+  const [evidence, setEvidence] = useState("0.5");
+  const [col, setCol] = useState(numCols[0]?.name || "");
+  const [successes, setSuccesses] = useState("10");
+  const [trials, setTrials] = useState("20");
+  const [priorAlpha, setPriorAlpha] = useState("1");
+  const [priorBeta, setPriorBeta] = useState("1");
+
+  const run = () => {
+    if (method === "bayes_theorem") {
+      onRun("/stats/bayesian", {
+        method,
+        prior: parseFloat(prior),
+        likelihood: parseFloat(likelihood),
+        evidence: parseFloat(evidence),
+      });
+    } else if (method === "credible_interval") {
+      const colData = columns.find(c => c.name === col);
+      onRun("/stats/bayesian", {
+        method,
+        col: generateFromStats(colData),
+        confidence: 0.95,
+      });
+    } else if (method === "beta_binomial") {
+      onRun("/stats/bayesian", {
+        method,
+        successes: parseInt(successes),
+        trials: parseInt(trials),
+        prior_alpha: parseFloat(priorAlpha),
+        prior_beta: parseFloat(priorBeta),
+      });
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Method</label>
+        <select value={method} onChange={e => setMethod(e.target.value)} style={selectStyle}>
+          <option value="bayes_theorem">Bayes Theorem</option>
+          <option value="credible_interval">Bayesian Credible Interval</option>
+          <option value="beta_binomial">Beta-Binomial Update</option>
+        </select>
+      </div>
+
+      {method === "bayes_theorem" && (
+        <>
+          <div>
+            <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Prior P(A) — your initial belief (0 to 1)</label>
+            <input type="number" min="0" max="1" step="0.1" value={prior} onChange={e => setPrior(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Likelihood P(B|A) — probability of evidence given A (0 to 1)</label>
+            <input type="number" min="0" max="1" step="0.1" value={likelihood} onChange={e => setLikelihood(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Evidence P(B) — total probability of evidence (0 to 1)</label>
+            <input type="number" min="0" max="1" step="0.1" value={evidence} onChange={e => setEvidence(e.target.value)} style={inputStyle} />
+          </div>
+        </>
+      )}
+
+      {method === "credible_interval" && (
+        <div>
+          <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Column</label>
+          <select value={col} onChange={e => setCol(e.target.value)} style={selectStyle}>
+            {numCols.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
+
+      {method === "beta_binomial" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Successes</label>
+              <input type="number" min="0" value={successes} onChange={e => setSuccesses(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Trials</label>
+              <input type="number" min="1" value={trials} onChange={e => setTrials(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Prior Alpha</label>
+              <input type="number" min="0.1" step="0.1" value={priorAlpha} onChange={e => setPriorAlpha(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Prior Beta</label>
+              <input type="number" min="0.1" step="0.1" value={priorBeta} onChange={e => setPriorBeta(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+        </>
+      )}
+      <button onClick={run} style={btnStyle}>Run Bayesian Analysis →</button>
+    </div>
+  );
+}
+
+// ── Survival Panel ────────────────────────────────────────────────────────────
+function SurvivalPanel({ columns, onRun }) {
+  const numCols = columns.filter(c => c.type === "numeric");
+  const [method, setMethod] = useState("kaplanmeier");
+  const [durationCol, setDurationCol] = useState(numCols[0]?.name || "");
+  const [durationColB, setDurationColB] = useState(numCols[1]?.name || numCols[0]?.name || "");
+  const [n, setN] = useState("50");
+
+  const generateSurvivalData = (size) => {
+    const durations = Array.from({ length: size }, () => Math.ceil(Math.random() * 100));
+    const events = Array.from({ length: size }, () => Math.random() > 0.3 ? 1 : 0);
+    return { durations, events };
+  };
+
+  const run = () => {
+    const size = parseInt(n);
+    if (method === "kaplanmeier" || method === "hazard") {
+      const { durations, events } = generateSurvivalData(size);
+      onRun("/stats/survival", { method, durations, events });
+    } else if (method === "logrank") {
+      const a = generateSurvivalData(size);
+      const b = generateSurvivalData(size);
+      onRun("/stats/survival", {
+        method,
+        durations_a: a.durations,
+        events_a: a.events,
+        durations_b: b.durations,
+        events_b: b.events,
+      });
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Method</label>
+        <select value={method} onChange={e => setMethod(e.target.value)} style={selectStyle}>
+          <option value="kaplanmeier">Kaplan-Meier Estimator</option>
+          <option value="logrank">Log-Rank Test</option>
+          <option value="hazard">Nelson-Aalen Hazard</option>
+        </select>
+      </div>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Sample size</label>
+        <select value={n} onChange={e => setN(e.target.value)} style={selectStyle}>
+          <option value="30">30 subjects</option>
+          <option value="50">50 subjects</option>
+          <option value="100">100 subjects</option>
+          <option value="200">200 subjects</option>
+        </select>
+      </div>
+      <div style={{
+        background: "#f7f6f1", borderRadius: 8, padding: "10px 14px",
+        fontSize: 12, color: "#888780",
+      }}>
+        💡 Survival analysis uses simulated time-to-event data. Upload a dataset with duration and event columns for real analysis.
+      </div>
+      <button onClick={run} style={btnStyle}>Run Survival Analysis →</button>
+    </div>
+  );
+}
+
 // ── Categories ────────────────────────────────────────────────────────────────
 const CATEGORIES = [
-
   { id: "ttest", label: "T-Tests", icon: "🔬", desc: "Compare means — one sample, two sample, paired" },
   { id: "anova", label: "ANOVA", icon: "📊", desc: "Compare means across multiple groups" },
   { id: "chisquare", label: "Chi-Square", icon: "χ²", desc: "Test association between categorical variables" },
@@ -712,7 +878,8 @@ const CATEGORIES = [
   { id: "timeseries", label: "Time Series", icon: "⏱️", desc: "Trend, moving average, stationarity analysis" },
   { id: "probability", label: "Probability", icon: "🎲", desc: "Fit distributions — Normal, Binomial, Poisson" },
   { id: "multivariate", label: "Multivariate", icon: "🧠", desc: "PCA dimensionality reduction and K-Means clustering" },
-
+  { id: "bayesian", label: "Bayesian", icon: "🎯", desc: "Bayes theorem, credible intervals, beta-binomial updates" },
+  { id: "survival", label: "Survival Analysis", icon: "⏳", desc: "Kaplan-Meier, log-rank test, hazard estimation" },
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -827,6 +994,8 @@ export default function StatsPage() {
                 {activeCategory === "timeseries" && <TimeSeriesPanel columns={result.columns} onRun={runTest} />}
                 {activeCategory === "probability" && <ProbabilityPanel columns={result.columns} onRun={runTest} />}
                 {activeCategory === "multivariate" && <MultivariatePanel columns={result.columns} onRun={runTest} />}
+                {activeCategory === "bayesian" && <BayesianPanel columns={result.columns} onRun={runTest} />}
+                {activeCategory === "survival" && <SurvivalPanel columns={result.columns} onRun={runTest} />}
 
                 {loading && (
                   <div style={{ textAlign: "center", padding: "20px 0" }}>
