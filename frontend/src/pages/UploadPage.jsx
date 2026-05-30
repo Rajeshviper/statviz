@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabaseClient";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -232,6 +233,17 @@ export default function UploadPage() {
       localStorage.setItem("statviz_result", JSON.stringify(data));  // ← add this
       localStorage.setItem("statviz_filename", file.name);           // ← add this
       localStorage.setItem("statviz_ready", "yes");
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("analyses").insert({
+          user_id: user.id,
+          filename: file.name,
+          rows: data.rows,
+          columns_count: data.columns_count,
+          result: data,
+        });
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -265,6 +277,17 @@ export default function UploadPage() {
             color: "#fff", fontWeight: 700, fontSize: 14,
           }}>S</div>
           <span style={{ fontSize: 16, fontWeight: 600, color: "#2c2c2a", letterSpacing: "-0.02em" }}>StatViz</span>
+          <button
+          onClick={() => navigate("/history")}
+          style={{
+            background: "none", border: "0.5px solid #d3d1c7",
+            borderRadius: 8, padding: "6px 14px", fontSize: 12,
+            color: "#5f5e5a", cursor: "pointer", marginLeft: 8,
+            }}
+            >
+              📋 History
+              </button>
+
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           {result && (
