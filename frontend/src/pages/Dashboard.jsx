@@ -350,16 +350,34 @@ export default function Dashboard() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <Badge color="green">{filename}</Badge>
             <button
-              onClick={() => {
-                localStorage.removeItem("statviz_ready");
-                localStorage.removeItem("statviz_result");
-                localStorage.removeItem("statviz_filename");
-                navigate("/");
-              }}
-              style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}
-            >
-              ← New file
-            </button>
+  onClick={() => navigate(-1)}
+  style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}
+>
+  ← Back
+</button>
+<button
+  onClick={() => navigate("/")}
+  style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}
+>
+  📂 Upload
+</button>
+<button
+  onClick={() => navigate("/stats")}
+  style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}
+>
+  🔬 Statistics
+</button>
+<button
+  onClick={() => {
+    localStorage.removeItem("statviz_ready");
+    localStorage.removeItem("statviz_result");
+    localStorage.removeItem("statviz_filename");
+    navigate("/");
+  }}
+  style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}
+>
+  🗑 New file
+</button>
           </div>
         )}
       </div>

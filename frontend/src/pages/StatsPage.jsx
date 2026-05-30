@@ -52,18 +52,132 @@ function ResultCard({ result }) {
       </div>
 
       {/* Key stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, marginBottom: 14 }}>
-        {Object.entries(result).filter(([k]) =>
-          !["test", "significant", "interpretation", "contingency_table", "group_summary", "coefficients"].includes(k)
-        ).map(([key, val]) => (
-          <div key={key} style={{ background: "#fff", borderRadius: 8, padding: "8px 12px" }}>
-            <div style={{ fontSize: 10, color: "#888780", fontFamily: "'DM Mono', monospace", textTransform: "uppercase" }}>{key.replace(/_/g, " ")}</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: "#2c2c2a", fontFamily: "'DM Mono', monospace" }}>
-              {typeof val === "boolean" ? (val ? "Yes" : "No") : typeof val === "number" ? val : String(val)}
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Cluster Sizes */}
+{result?.cluster_sizes && (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: 12, fontWeight: 500, color: "#2c2c2a", marginBottom: 8 }}>
+      Cluster Sizes
+    </div>
+
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {Object.entries(result.cluster_sizes).map(([k, v]) => (
+        <div
+          key={k}
+          style={{
+            background: "#fff",
+            borderRadius: 8,
+            padding: "6px 12px",
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: "#888780" }}>{k}: </span>
+          <span style={{ fontWeight: 500, fontFamily: "'DM Mono', monospace" }}>
+            {v} items
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{/* PCA Explained Variance */}
+{result?.explained_variance?.length > 0 && (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: 12, fontWeight: 500, color: "#2c2c2a", marginBottom: 8 }}>
+      Explained Variance per Component
+    </div>
+
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {result.explained_variance.map((v, i) => (
+        <div
+          key={i}
+          style={{
+            background: "#fff",
+            borderRadius: 8,
+            padding: "6px 12px",
+            fontSize: 12,
+          }}
+        >
+          <span style={{ color: "#888780" }}>PC{i + 1}: </span>
+          <span style={{ fontWeight: 500, fontFamily: "'DM Mono', monospace" }}>
+            {(v * 100).toFixed(1)}%
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{/* PCA Loadings */}
+{result?.loadings && (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: 12, fontWeight: 500, color: "#2c2c2a", marginBottom: 8 }}>
+      Feature Loadings
+    </div>
+
+    <div style={{ overflowX: "auto" }}>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          fontSize: 11,
+        }}
+      >
+        <thead>
+          <tr style={{ borderBottom: "0.5px solid #e2e0d8" }}>
+            <th style={{ padding: "6px 10px", textAlign: "left", color: "#888780" }}>
+              Feature
+            </th>
+
+            {result.loadings[Object.keys(result.loadings)[0]]?.map((_, i) => (
+              <th
+                key={i}
+                style={{
+                  padding: "6px 10px",
+                  textAlign: "center",
+                  color: "#888780",
+                }}
+              >
+                PC{i + 1}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody>
+          {Object.entries(result.loadings).map(([feature, vals]) => (
+            <tr key={feature} style={{ borderBottom: "0.5px solid #f1efe8" }}>
+              <td
+                style={{
+                  padding: "6px 10px",
+                  fontWeight: 500,
+                  color: "#2c2c2a",
+                }}
+              >
+                {feature}
+              </td>
+
+              {vals.map((v, i) => (
+                <td
+                  key={i}
+                  style={{
+                    padding: "6px 10px",
+                    textAlign: "center",
+                    fontFamily: "'DM Mono', monospace",
+                    color: Math.abs(v) > 0.5 ? "#185fa5" : "#444441",
+                    fontWeight: Math.abs(v) > 0.5 ? 600 : 400,
+                  }}
+                >
+                  {v}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
       {/* Coefficients for regression */}
       {result.coefficients && (
@@ -646,13 +760,17 @@ export default function StatsPage() {
           <span style={{ fontSize: 12, color: "#888780", marginLeft: 4 }}>Statistics Module</span>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={() => navigate("/")} style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}>
-            ← Upload
-          </button>
-          <button onClick={() => navigate("/dashboard")} style={{ background: "#185fa5", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-            Charts →
-          </button>
-        </div>
+  <button onClick={() => navigate(-1)} style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}>
+    ← Back
+  </button>
+  <button onClick={() => navigate("/")} style={{ background: "none", border: "0.5px solid #d3d1c7", borderRadius: 8, padding: "6px 14px", fontSize: 12, color: "#5f5e5a", cursor: "pointer" }}>
+    📂 Upload
+  </button>
+  <button onClick={() => navigate("/dashboard")} style={{ background: "#185fa5", color: "#fff", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+    📊 Charts
+  </button>
+</div>
+
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
