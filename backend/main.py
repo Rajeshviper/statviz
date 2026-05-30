@@ -11,6 +11,7 @@ import numpy as np
 import scipy.stats as stats
 import io
 import io as io_module
+import httpx
 
 app = FastAPI(title="StatViz API", version="1.0.0")
 
@@ -251,3 +252,67 @@ async def export_pdf(data: dict):
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=statviz_{filename}_report.pdf"}
     )
+
+
+@app.post("/ai/insights")
+async def ai_insights(data: dict):
+    # Build a summary of the dataset for Claude
+    filename = data.get("filename", "dataset")
+    rows = data.get("rows", 0)
+    columns = data.get("columns", [])
+
+    num_cols = [c for c in columns if c.get("type") == "numeric"]
+    cat_cols = [c for c in columns if c.get("type") == "categorical"]
+
+    # Build stats summary text
+    stats_summary = f"Dataset: {filename}\nRows: {rows}\n\n"
+    stats_summary += "Numeric columns:\n"
+    for col in num_cols:
+        stats_summary += f"- {col['name']}: mean={col.get('mean', 0):.2f}, std={col.get('std', 0):.2f}, min={col.get('min', 0):.2f}, max={col.get('max', 0):.2f}, outliers={col.get('outliers_count', 0)}, normal={col.get('is_normal', False)}\n"
+
+    stats_summary += "\nCategorical columns:\n"
+    for col in cat_cols:
+        top = col.get("top_values", {})
+        top_str = ", ".join([f"{k}({v})" for k, v in list(top.items())[:3]])
+        stats_summary += f"- {col['name']}: {col.get('unique', 0)} unique values, top: {top_str}\n"
+
+    corr = data.get("correlation")
+    if corr:
+        cols_list = corr.get("columns", [])
+        matrix = corr.get("matrix", [])
+        stats_summary += "\nStrong correlations (>0.7):\n"
+        for i, row in enumerate(matrix):
+            for j, val in enumerate(row):
+                if i < j and val is not None and abs(val) > 0.7:
+                    stats_summary += f"- {cols_list[i]} & {cols_list[j]}: {val:.2f}\n"
+
+    # Call Claude API
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {data.get('api_key', '')}",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "llama-3.1-8b-instant",
+                "max_tokens": 1000,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"""You are a data analyst. Analyse this dataset and give 5 clear, specific insights in simple English. Focus on patterns, outliers, correlations and what the data tells us. Be concise and helpful.
+
+{stats_summary}
+
+Give exactly 5 insights as a numbered list. Each insight should be 1-2 sentences."""
+                    }
+                ]
+            }
+        )
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"Groq API error: {response.text}")
+
+    result = response.json()
+    insights = result["choices"][0]["message"]["content"]
+    return {"insights": insights}

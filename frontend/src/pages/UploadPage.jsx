@@ -2,6 +2,8 @@ import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
+
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const fmt = (n, d = 2) => (n == null ? "—" : Number(n).toFixed(d));
@@ -212,6 +214,9 @@ export default function UploadPage() {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [tab, setTab] = useState("overview");
+  const [insights, setInsights] = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const inputRef = useRef();
   const navigate = useNavigate();
 
@@ -251,12 +256,41 @@ export default function UploadPage() {
     }
   }, []);
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  };
+  const generateInsights = async () => {
+  if (!apiKey) {
+    alert("Please enter your Claude API key first!");
+    return;
+  }
+
+  setInsightsLoading(true);
+  setInsights(null);
+
+  try {
+    const res = await fetch(`${API_URL}/ai/insights`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...result, api_key: apiKey }),
+    });
+
+    const data = await res.json();
+    console.log("AI response:", data);
+    if (!res.ok) throw new Error(data.detail || "Failed");
+    if (!data.insights) throw new Error("No insights returned from server");
+    setInsights(data.insights);
+  } catch (e) {
+    alert("AI insights failed: " + e.message);
+  } finally {
+    setInsightsLoading(false);
+  }
+};
+
+const onDrop = (e) => {
+  e.preventDefault();
+  setDragging(false);
+
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+};
 
   const numCols = result?.columns?.filter(c => c.type === "numeric") || [];
 
@@ -527,6 +561,46 @@ export default function UploadPage() {
               </div>
             )}
             {/* Action buttons */}
+            {/* AI Insights */}
+            <div style={{ marginTop: 24, background: "#fff", border: "0.5px solid #e2e0d8", borderRadius: 14, padding: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#2c2c2a", marginBottom: 4 }}>🤖 AI Insights</div>
+              <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>Get Claude AI to analyse your data and generate insights</div>
+              {/* API Key input */}
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <input
+                type="password"
+                placeholder="Enter your Claude API key (sk-ant-...)"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                style={{
+                  flex: 1, padding: "9px 14px", fontSize: 12,border: "0.5px solid #d3d1c7", borderRadius: 8,background: "#fafaf8", color: "#2c2c2a", outline: "none",
+                }}
+                />
+                <button
+                onClick={generateInsights}
+                disabled={insightsLoading}
+                style={{
+                  background: insightsLoading ? "#b5d4f4" : "#185fa5",
+                  color: "#fff", border: "none", borderRadius: 8,padding: "9px 18px", fontSize: 12, fontWeight: 500,
+                  cursor: insightsLoading ? "not-allowed" : "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                >
+                  {insightsLoading ? "Analysing..." : "✨ Generate Insights"}
+                  </button>
+                  </div>
+                  
+                  {/* Insights output */}
+                  {insights && (
+                    <div style={{
+                      background: "#f7f6f1", borderRadius: 10, padding: 16,
+                      fontSize: 13, color: "#2c2c2a", lineHeight: 1.7,
+                      whiteSpace: "pre-wrap",
+                      }}>
+                        {insights}
+                        </div>
+                      )}
+                      </div>
             <div style={{ marginTop: 28, display: "flex", justifyContent: "center", gap: 12 }}>
               <button
               onClick={() => navigate("/dashboard")}
