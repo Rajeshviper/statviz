@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import AdvancedCharts from "../components/AdvancedCharts";
 import {
   BarChart, Bar, LineChart, Line, ScatterChart, Scatter,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -305,6 +306,7 @@ export default function Dashboard() {
   const [result, setResult] = useState(saved ? JSON.parse(saved) : null);
   const [filename, setFilename] = useState(savedName || "");
   const [rawRows, setRawRows] = useState([]);
+  const [chartTab, setChartTab] = useState("basic");
   const navigate = useNavigate();
 
   const handleResult = useCallback((data, file) => {
@@ -373,6 +375,21 @@ export default function Dashboard() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
             {/* Summary row */}
+            {/* Tab switcher */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "0.5px solid #e2e0d8" }}>
+              {["basic", "advanced"].map(t => (
+                <button key={t} onClick={() => setChartTab(t)} style={{
+                  background: "none", border: "none", padding: "8px 16px",
+                  fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                  color: chartTab === t ? "#185fa5" : "#888780",
+                  fontWeight: chartTab === t ? 500 : 400,
+                  borderBottom: chartTab === t ? "2px solid #185fa5" : "2px solid transparent",
+                  marginBottom: -1, transition: "all 0.15s",
+                  }}>
+                    {t === "basic" ? "📊 Basic Charts" : "🔬 Advanced Charts"}
+                    </button>
+                  ))}
+                  </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Badge color="blue">{result.rows.toLocaleString()} rows</Badge>
               <Badge color="blue">{result.columns_count} columns</Badge>
@@ -381,6 +398,9 @@ export default function Dashboard() {
             </div>
 
             {/* Charts grid */}
+            {/* Basic Charts */}
+            {chartTab === "basic" && (
+              <div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <MeansBarChart columns={result.columns} />
               <HistogramChart columns={result.columns} />
@@ -392,12 +412,20 @@ export default function Dashboard() {
             </div>
 
             {result.categorical_columns.length > 0 && (
+              <div style={{ marginTop: 16 }}>
               <CategoricalChart columns={result.columns} />
+              </div>
             )}
 
           </div>
         )}
+         {/* Advanced Charts */}
+        {chartTab === "advanced" && (
+          <AdvancedCharts columns={result.columns} correlation={result.correlation} />
+        )}
       </div>
-    </div>
-  );
+    )}
+  </div>
+  </div>
+);
 }
