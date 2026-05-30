@@ -370,46 +370,93 @@ async def run_ttest(data: dict):
 
 @app.post("/stats/anova")
 async def run_anova(data: dict):
-    """One-way ANOVA with post-hoc Tukey test"""
+    """One-way and Two-way ANOVA"""
+    anova_type = data.get("anova_type", "one_way")
     groups = data.get("groups", {})
 
     try:
-        group_data = [np.array(v) for v in groups.values()]
-        group_names = list(groups.keys())
+        if anova_type == "one_way":
+            group_data = [np.array(v) for v in groups.values()]
+            group_names = list(groups.keys())
 
-        if len(group_data) < 2:
-            raise HTTPException(status_code=400, detail="Need at least 2 groups")
+            if len(group_data) < 2:
+                raise HTTPException(status_code=400, detail="Need at least 2 groups")
 
-        stat, p = scipy_stats.f_oneway(*group_data)
+            stat, p = scipy_stats.f_oneway(*group_data)
 
-        # Effect size (eta squared)
-        all_data = np.concatenate(group_data)
-        grand_mean = np.mean(all_data)
-        ss_between = sum(len(g) * (np.mean(g) - grand_mean)**2 for g in group_data)
-        ss_total = sum((x - grand_mean)**2 for x in all_data)
-        eta_squared = float(ss_between / ss_total) if ss_total > 0.0001 else 0.0
+            all_data = np.concatenate(group_data)
+            grand_mean = np.mean(all_data)
+            ss_between = sum(len(g) * (np.mean(g) - grand_mean)**2 for g in group_data)
+            ss_total = sum((x - grand_mean)**2 for x in all_data)
+            denom = ss_total if ss_total > 0.0001 else 1
+            f_denom = (ss_total - ss_between) / (len(all_data) - len(group_data))
+            eta_squared = float(ss_between / denom) if denom > 0.0001 else 0.0
 
-        # Group summaries
-        group_summary = {}
-        for name, gdata in zip(group_names, group_data):
-            group_summary[name] = {
-                "mean": round(float(np.mean(gdata)), 3),
-                "std": round(float(np.std(gdata)), 3),
-                "n": len(gdata)
+            group_summary = {}
+            for name, gdata in zip(group_names, group_data):
+                group_summary[name] = {
+                    "mean": round(float(np.mean(gdata)), 3),
+                    "std": round(float(np.std(gdata)), 3),
+                    "n": len(gdata)
+                }
+
+            return {
+                "test": "One-Way ANOVA",
+                "f_statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "eta_squared": round(float(eta_squared), 4),
+                "significant": bool(p < 0.05),
+                "group_summary": group_summary,
+                "interpretation": f"One-Way ANOVA: {'Significant' if p < 0.05 else 'No significant'} difference between {len(group_data)} groups (F={stat:.3f}, p={p:.4f}). Effect size η²={eta_squared:.3f} ({'large' if eta_squared > 0.14 else 'medium' if eta_squared > 0.06 else 'small'} effect)."
             }
 
-        return {
-            "test": "One-Way ANOVA",
-            "f_statistic": round(float(stat), 4),
-            "p_value": round(float(p), 4),
-            "eta_squared": round(float(eta_squared), 4),
-            "significant": bool(p < 0.05),
-            "group_summary": group_summary,
-            "interpretation": f"There is {'a significant' if p < 0.05 else 'no significant'} difference between groups (F={stat:.3f}, p={p:.4f}). Effect size η²={eta_squared:.3f} ({'large' if eta_squared > 0.14 else 'medium' if eta_squared > 0.06 else 'small'} effect)."
-        }
+        elif anova_type == "two_way":
+            group_a = data.get("group_a", {})
+            group_b = data.get("group_b", {})
+
+            # Build combined data
+            all_values = []
+            factor_a = []
+            factor_b = []
+
+            for level_a, vals_a in group_a.items():
+                for level_b, vals_b in group_b.items():
+                    n = min(len(vals_a), len(vals_b))
+                    combined = [(vals_a[i] + vals_b[i]) / 2 for i in range(n)]
+                    all_values.extend(combined)
+                    factor_a.extend([level_a] * n)
+                    factor_b.extend([level_b] * n)
+
+            df_data = pd.DataFrame({
+                "value": all_values,
+                "factor_a": factor_a,
+                "factor_b": factor_b,
+            })
+
+            # Main effects
+            groups_a = [df_data[df_data["factor_a"] == l]["value"].values for l in df_data["factor_a"].unique()]
+            groups_b = [df_data[df_data["factor_b"] == l]["value"].values for l in df_data["factor_b"].unique()]
+
+            f_a, p_a = scipy_stats.f_oneway(*groups_a)
+            f_b, p_b = scipy_stats.f_oneway(*groups_b)
+
+            # Group summaries
+            summary_a = {l: {"mean": round(float(np.mean(g)), 3), "n": len(g)} for l, g in zip(df_data["factor_a"].unique(), groups_a)}
+            summary_b = {l: {"mean": round(float(np.mean(g)), 3), "n": len(g)} for l, g in zip(df_data["factor_b"].unique(), groups_b)}
+
+            return {
+                "test": "Two-Way ANOVA",
+                "factor_a_f": round(float(f_a), 4),
+                "factor_a_p": round(float(p_a), 4),
+                "factor_b_f": round(float(f_b), 4),
+                "factor_b_p": round(float(p_b), 4),
+                "significant": bool(p_a < 0.05 or p_b < 0.05),
+                "group_summary": {**{f"A:{k}": v for k, v in summary_a.items()}, **{f"B:{k}": v for k, v in summary_b.items()}},
+                "interpretation": f"Two-Way ANOVA: Factor A {'significant' if p_a < 0.05 else 'not significant'} (F={f_a:.3f}, p={p_a:.4f}). Factor B {'significant' if p_b < 0.05 else 'not significant'} (F={f_b:.3f}, p={p_b:.4f})."
+            }
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.post("/stats/chisquare")
 async def run_chisquare(data: dict):
@@ -485,6 +532,14 @@ async def run_regression(data: dict):
     try:
         X = np.array(X_data).reshape(-1, len(feature_names)) if len(feature_names) > 1 else np.array(X_data).reshape(-1, 1)
         y = np.array(y_data)
+
+        #Remove NaN values
+        mask = ~(np.isnan(X).any(axis=1) | np.isnan(y))
+        X = X[mask]
+        y = y[mask]
+        
+        if len(X) < 3:
+            raise HTTPException(status_code=400, detail="Not enough valid data points after removing NaN values.")
 
         model = LinearRegression()
         model.fit(X, y)

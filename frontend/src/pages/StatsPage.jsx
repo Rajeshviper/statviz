@@ -285,25 +285,45 @@ function TTestPanel({ columns, onRun }) {
 function AnovaPanel({ columns, onRun }) {
   const numCols = columns.filter(c => c.type === "numeric");
   const catCols = columns.filter(c => c.type === "categorical");
+  const [anovaType, setAnovaType] = useState("one_way");
   const [valueCol, setValueCol] = useState(numCols[0]?.name || "");
   const [groupCol, setGroupCol] = useState(catCols[0]?.name || "");
+  const [groupColB, setGroupColB] = useState(catCols[1]?.name || catCols[0]?.name || "");
 
   const run = () => {
     const vCol = columns.find(c => c.name === valueCol);
     const gCol = columns.find(c => c.name === groupCol);
+    const gColB = columns.find(c => c.name === groupColB);
     if (!vCol || !gCol) return;
 
-    const groups = {};
-    const topVals = Object.keys(gCol.top_values || {});
-    topVals.forEach(group => {
-      groups[group] = generateFromStats(vCol);
-    });
-
-    onRun("/stats/anova", { groups });
+    if (anovaType === "one_way") {
+      const groups = {};
+      Object.keys(gCol.top_values || {}).forEach(group => {
+        groups[group] = generateFromStats(vCol);
+      });
+      onRun("/stats/anova", { anova_type: "one_way", groups });
+    } else {
+      const group_a = {};
+      const group_b = {};
+      Object.keys(gCol.top_values || {}).forEach(level => {
+        group_a[level] = generateFromStats(vCol);
+      });
+      Object.keys(gColB?.top_values || {}).forEach(level => {
+        group_b[level] = generateFromStats(vCol);
+      });
+      onRun("/stats/anova", { anova_type: "two_way", group_a, group_b });
+    }
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>ANOVA type</label>
+        <select value={anovaType} onChange={e => setAnovaType(e.target.value)} style={selectStyle}>
+          <option value="one_way">One-Way ANOVA</option>
+          <option value="two_way">Two-Way ANOVA</option>
+        </select>
+      </div>
       <div>
         <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Value column (numeric)</label>
         <select value={valueCol} onChange={e => setValueCol(e.target.value)} style={selectStyle}>
@@ -311,12 +331,22 @@ function AnovaPanel({ columns, onRun }) {
         </select>
       </div>
       <div>
-        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Group column (categorical)</label>
+        <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>
+          {anovaType === "one_way" ? "Group column" : "Factor A (categorical)"}
+        </label>
         <select value={groupCol} onChange={e => setGroupCol(e.target.value)} style={selectStyle}>
           {catCols.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
         </select>
       </div>
-      <button onClick={run} style={btnStyle}>Run ANOVA →</button>
+      {anovaType === "two_way" && (
+        <div>
+          <label style={{ fontSize: 12, color: "#5f5e5a", fontWeight: 500, display: "block", marginBottom: 6 }}>Factor B (categorical)</label>
+          <select value={groupColB} onChange={e => setGroupColB(e.target.value)} style={selectStyle}>
+            {catCols.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
+      <button onClick={run} style={btnStyle}>Run {anovaType === "one_way" ? "One-Way" : "Two-Way"} ANOVA →</button>
     </div>
   );
 }
