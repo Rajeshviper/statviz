@@ -321,6 +321,17 @@ const onDrop = (e) => {
             >
               📋 History
               </button>
+          <button
+          onClick={() => navigate("/stats")}
+          style={{
+            background: "none", border: "0.5px solid #d3d1c7",
+            borderRadius: 8, padding: "6px 14px", fontSize: 12,
+            color: "#5f5e5a", cursor: "pointer", marginLeft: 8,
+            }}
+            >
+              
+  🔬 Statistics
+</button>
 
         </div>
         <div style={{ display: "flex", gap: 10 }}>

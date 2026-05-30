@@ -1,3 +1,4 @@
+from scipy import stats as scipy_stats
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -316,3 +317,243 @@ Give exactly 5 insights as a numbered list. Each insight should be 1-2 sentences
     result = response.json()
     insights = result["choices"][0]["message"]["content"]
     return {"insights": insights}
+
+from scipy import stats as scipy_stats
+
+@app.post("/stats/ttest")
+async def run_ttest(data: dict):
+    """One-sample, two-sample and paired t-test"""
+    test_type = data.get("test_type", "one_sample")
+    col1 = data.get("col1", [])
+    col2 = data.get("col2", [])
+    pop_mean = data.get("pop_mean", 0)
+
+    try:
+        if test_type == "one_sample":
+            stat, p = scipy_stats.ttest_1samp(col1, pop_mean)
+            df = len(col1) - 1
+            result = {
+                "test": "One-Sample T-Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "degrees_of_freedom": df,
+                "significant": bool(p < 0.05),
+                "interpretation": f"The mean is {'significantly different from' if p < 0.05 else 'not significantly different from'} {pop_mean} (t={stat:.3f}, p={p:.4f})"
+            }
+        elif test_type == "two_sample":
+            stat, p = scipy_stats.ttest_ind(col1, col2)
+            df = len(col1) + len(col2) - 2
+            result = {
+                "test": "Two-Sample Independent T-Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "degrees_of_freedom": df,
+                "significant": bool(p < 0.05),
+                "mean1": round(float(np.mean(col1)), 4),
+                "mean2": round(float(np.mean(col2)), 4),
+                "interpretation": f"The two groups are {'significantly different' if p < 0.05 else 'not significantly different'} (t={stat:.3f}, p={p:.4f})"
+            }
+        elif test_type == "paired":
+            stat, p = scipy_stats.ttest_rel(col1, col2)
+            result = {
+                "test": "Paired T-Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "significant": bool(p < 0.05),
+                "mean_difference": round(float(np.mean(np.array(col1) - np.array(col2))), 4),
+                "interpretation": f"The paired difference is {'significant' if p < 0.05 else 'not significant'} (t={stat:.3f}, p={p:.4f})"
+            }
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/stats/anova")
+async def run_anova(data: dict):
+    """One-way ANOVA with post-hoc Tukey test"""
+    groups = data.get("groups", {})
+
+    try:
+        group_data = [np.array(v) for v in groups.values()]
+        group_names = list(groups.keys())
+
+        if len(group_data) < 2:
+            raise HTTPException(status_code=400, detail="Need at least 2 groups")
+
+        stat, p = scipy_stats.f_oneway(*group_data)
+
+        # Effect size (eta squared)
+        all_data = np.concatenate(group_data)
+        grand_mean = np.mean(all_data)
+        ss_between = sum(len(g) * (np.mean(g) - grand_mean)**2 for g in group_data)
+        ss_total = sum((x - grand_mean)**2 for x in all_data)
+        eta_squared = float(ss_between / ss_total) if ss_total > 0.0001 else 0.0
+
+        # Group summaries
+        group_summary = {}
+        for name, gdata in zip(group_names, group_data):
+            group_summary[name] = {
+                "mean": round(float(np.mean(gdata)), 3),
+                "std": round(float(np.std(gdata)), 3),
+                "n": len(gdata)
+            }
+
+        return {
+            "test": "One-Way ANOVA",
+            "f_statistic": round(float(stat), 4),
+            "p_value": round(float(p), 4),
+            "eta_squared": round(float(eta_squared), 4),
+            "significant": bool(p < 0.05),
+            "group_summary": group_summary,
+            "interpretation": f"There is {'a significant' if p < 0.05 else 'no significant'} difference between groups (F={stat:.3f}, p={p:.4f}). Effect size η²={eta_squared:.3f} ({'large' if eta_squared > 0.14 else 'medium' if eta_squared > 0.06 else 'small'} effect)."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/stats/chisquare")
+async def run_chisquare(data: dict):
+    """Chi-square test of independence"""
+    col1 = data.get("col1", [])
+    col2 = data.get("col2", [])
+
+    try:
+        contingency = pd.crosstab(pd.Series(col1), pd.Series(col2))
+        chi2, p, dof, expected = scipy_stats.chi2_contingency(contingency)
+
+        # Cramer's V effect size
+        n = len(col1)
+        denom = n * (min(contingency.shape) - 1)
+        cramers_v = np.sqrt(chi2 / denom) if denom > 0 else 0.0
+
+        return {
+            "test": "Chi-Square Test of Independence",
+            "chi2_statistic": round(float(chi2), 4),
+            "p_value": round(float(p), 4),
+            "degrees_of_freedom": int(dof),
+            "cramers_v": round(float(cramers_v), 4),
+            "significant": bool(p < 0.05),
+            "contingency_table": contingency.to_dict(),
+            "interpretation": f"The two variables are {'significantly associated' if p < 0.05 else 'not significantly associated'} (χ²={chi2:.3f}, p={p:.4f}). Cramer's V={cramers_v:.3f} ({'strong' if cramers_v > 0.5 else 'moderate' if cramers_v > 0.3 else 'weak'} association)."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/stats/correlation")
+async def run_correlation(data: dict):
+    """Pearson, Spearman and Kendall correlation"""
+    col1 = data.get("col1", [])
+    col2 = data.get("col2", [])
+    method = data.get("method", "pearson")
+
+    try:
+        if method == "pearson":
+            stat, p = scipy_stats.pearsonr(col1, col2)
+            test_name = "Pearson Correlation"
+        elif method == "spearman":
+            stat, p = scipy_stats.spearmanr(col1, col2)
+            test_name = "Spearman Rank Correlation"
+        elif method == "kendall":
+            stat, p = scipy_stats.kendalltau(col1, col2)
+            test_name = "Kendall Tau Correlation"
+
+        strength = "very strong" if abs(stat) > 0.8 else "strong" if abs(stat) > 0.6 else "moderate" if abs(stat) > 0.4 else "weak" if abs(stat) > 0.2 else "very weak"
+        direction = "positive" if stat > 0 else "negative"
+
+        return {
+            "test": test_name,
+            "correlation": round(float(stat), 4),
+            "p_value": round(float(p), 4),
+            "significant": bool(p < 0.05),
+            "interpretation": f"There is a {strength} {direction} correlation (r={stat:.3f}, p={p:.4f}). {'Statistically significant.' if p < 0.05 else 'Not statistically significant.'}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/stats/regression")
+async def run_regression(data: dict):
+    """Simple and multiple linear regression"""
+    from sklearn.linear_model import LinearRegression
+    from sklearn.metrics import r2_score, mean_squared_error
+
+    X_data = data.get("X", [])
+    y_data = data.get("y", [])
+    feature_names = data.get("feature_names", [])
+
+    try:
+        X = np.array(X_data).reshape(-1, len(feature_names)) if len(feature_names) > 1 else np.array(X_data).reshape(-1, 1)
+        y = np.array(y_data)
+
+        model = LinearRegression()
+        model.fit(X, y)
+        y_pred = model.predict(X)
+
+        r2 = r2_score(y, y_pred)
+        mse = mean_squared_error(y, y_pred)
+        rmse = np.sqrt(mse)
+
+        # F-statistic
+        n, k = X.shape
+        ss_res = np.sum((y - y_pred) ** 2)
+        ss_tot = np.sum((y - np.mean(y)) ** 2)
+        f_stat = ((ss_tot - ss_res) / k) / (ss_res / (n - k - 1)) if n > k + 1 else 0
+
+        coefficients = {}
+        for i, name in enumerate(feature_names):
+            coefficients[name] = round(float(model.coef_[i]), 4)
+
+        return {
+            "test": "Linear Regression",
+            "r_squared": round(float(r2), 4),
+            "adjusted_r_squared": round(float(1 - (1 - r2) * (n - 1) / (n - k - 1)), 4),
+            "rmse": round(float(rmse), 4),
+            "f_statistic": round(float(f_stat), 4),
+            "intercept": round(float(model.intercept_), 4),
+            "coefficients": coefficients,
+            "interpretation": f"The model explains {r2*100:.1f}% of variance (R²={r2:.3f}). RMSE={rmse:.3f}. {'Good fit.' if r2 > 0.7 else 'Moderate fit.' if r2 > 0.4 else 'Poor fit — consider other models.'}"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/stats/nonparametric")
+async def run_nonparametric(data: dict):
+    """Mann-Whitney, Wilcoxon, Kruskal-Wallis tests"""
+    test_type = data.get("test_type", "mannwhitney")
+    col1 = data.get("col1", [])
+    col2 = data.get("col2", [])
+    groups = data.get("groups", {})
+
+    try:
+        if test_type == "mannwhitney":
+            stat, p = scipy_stats.mannwhitneyu(col1, col2, alternative="two-sided")
+            return {
+                "test": "Mann-Whitney U Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "significant": bool(p < 0.05),
+                "interpretation": f"The two groups are {'significantly different' if p < 0.05 else 'not significantly different'} (U={stat:.3f}, p={p:.4f}). Use this instead of t-test when data is not normally distributed."
+            }
+        elif test_type == "wilcoxon":
+            stat, p = scipy_stats.wilcoxon(col1, col2)
+            return {
+                "test": "Wilcoxon Signed-Rank Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "significant": bool(p < 0.05),
+                "interpretation": f"The paired difference is {'significant' if p < 0.05 else 'not significant'} (W={stat:.3f}, p={p:.4f}). Non-parametric alternative to paired t-test."
+            }
+        elif test_type == "kruskalwallis":
+            group_data = [np.array(v) for v in groups.values()]
+            stat, p = scipy_stats.kruskal(*group_data)
+            return {
+                "test": "Kruskal-Wallis Test",
+                "statistic": round(float(stat), 4),
+                "p_value": round(float(p), 4),
+                "significant": bool(p < 0.05),
+                "interpretation": f"There is {'a significant' if p < 0.05 else 'no significant'} difference between groups (H={stat:.3f}, p={p:.4f}). Non-parametric alternative to one-way ANOVA."
+            }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

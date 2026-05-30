@@ -5,6 +5,7 @@ import AuthPage from "./pages/AuthPage";
 import UploadPage from "./pages/UploadPage";
 import Dashboard from "./pages/Dashboard";
 import HistoryPage from "./pages/HistoryPage";
+import StatsPage from "./pages/StatsPage";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/" element={user ? <UploadPage user={user} /> : <Navigate to="/auth" />} />
         <Route path="/dashboard" element={user ? <Dashboard user={user} /> : <Navigate to="/auth" />} />
         <Route path="/history" element={user ? <HistoryPage user={user} /> : <Navigate to="/auth" />} />
+        <Route path="/stats" element={user ? <StatsPage /> : <Navigate to="/auth" />} />
       </Routes>
     </BrowserRouter>
   );
