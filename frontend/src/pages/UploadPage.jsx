@@ -335,6 +335,26 @@ const onDrop = (e) => {
 
         </div>
         <div style={{ display: "flex", gap: 10 }}>
+
+          <button
+  onClick={async () => {
+    await supabase.auth.signOut();
+    localStorage.clear();
+    navigate("/auth");
+  }}
+  style={{
+    background: "#a32d2d",
+    color: "#fff",
+    border: "none",
+    borderRadius: 8,
+    padding: "7px 16px",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+  }}
+>
+  Logout
+</button>
           {result && (
             <button
               onClick={() => navigate("/dashboard")}
