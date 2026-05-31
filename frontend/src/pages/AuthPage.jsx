@@ -42,8 +42,8 @@ export default function AuthPage({ onAuth }) {
         options: { data: { full_name: name } },
       });
       if (error) throw error;
-      setSuccess("OTP sent to your email! Please check your inbox.");
-      setMode("otp");
+      setSuccess("Account created! Please check your inbox and click the confirmation link to verify your email.");
+      setMode("confirm_email");
     } catch (e) {
       setError(e.message);
     } finally {
@@ -213,6 +213,30 @@ export default function AuthPage({ onAuth }) {
             </button>
           </div>
         )}
+        {mode === "confirm_email" && (
+  <div style={{ textAlign: "center" }}>
+    <div style={{ fontSize: 40, marginBottom: 16 }}>✉️</div>
+    <div style={{ fontSize: 20, fontWeight: 600, color: "#2c2c2a", marginBottom: 8 }}>Confirm your email</div>
+    <div style={{ fontSize: 13, color: "#888780", marginBottom: 8, lineHeight: 1.6 }}>
+      We sent a confirmation link to <strong>{email}</strong>.
+    </div>
+    <div style={{ fontSize: 13, color: "#888780", marginBottom: 24, lineHeight: 1.6 }}>
+      Click the link in the email to activate your account and start using StatViz.
+    </div>
+    <div style={{
+      background: "#e6f1fb", borderRadius: 10, padding: "12px 16px",
+      fontSize: 12, color: "#185fa5", marginBottom: 20, lineHeight: 1.6,
+    }}>
+      💡 Check your spam folder if you don't see it in inbox.
+    </div>
+    <button
+      onClick={() => { setMode("login"); clearMessages(); }}
+      style={{ width: "100%", padding: "11px", fontSize: 14, fontWeight: 500, background: "#185fa5", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+    >
+      ← Back to login
+    </button>
+  </div>
+)}
 
         {/* ── Login / Signup ── */}
         {(mode === "login" || mode === "signup") && (
@@ -275,4 +299,4 @@ export default function AuthPage({ onAuth }) {
       </div>
     </div>
   );
-}
+} 
